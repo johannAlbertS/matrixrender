@@ -1,9 +1,20 @@
 //#![no_std]
 
 const WIDTH: usize = 10;
-const HEIGHT: usize = 9;
+const HEIGHT: usize = 10;
 
 mod bresenham;
+
+pub type String<'a> = &'a [char];
+
+struct State {
+    pub(crate) fonts: &'static [&'static[&'static[bool]]; 26],
+}
+
+#[allow(non_upper_case_globals)]
+static mut state: State = State {
+    fonts: &[&[&[false; 7]]; 26],   
+};
 
 #[inline]
 fn mixpixel(position: (usize, usize), value: (u8, u8, u8)) {
@@ -61,6 +72,26 @@ pub fn draw_bitmap(map: &[&[(u8, u8, u8)]], position: (usize, usize)) {
     }
 }
 
+pub fn draw_generic_bitmap(map: &[&[bool]], position: (usize, usize), color: (u8, u8, u8)) {
+    let mut xindex = position.0;
+    let mut yindex = position.1;
+    let mut xcounter = 0;
+    let mut ycounter = 0;
+    while xindex < WIDTH && xcounter < map.len() {
+        while yindex < HEIGHT && ycounter < map[0].len() {
+            if map[xcounter][ycounter] {
+                unsafe { display[xindex][yindex] = color; }
+            }
+            yindex += 1;
+            ycounter += 1;
+        }
+        yindex = 0;
+        ycounter = 0;
+        xindex += 1;
+        xcounter += 1;
+    }   
+}
+
 pub fn draw_line(point1: (usize, usize), point2: (usize, usize), color: (u8, u8, u8)) {
     draw_line_internal(point1, point2, color, mixpixel);
 }
@@ -74,3 +105,58 @@ fn draw_line_internal(point1: (usize, usize), point2: (usize, usize), color: (u8
     )
 }
 
+pub fn fonts(fonts: &'static [&'static [&'static [bool]]; 26]) {
+    unsafe { state.fonts = fonts; }
+}
+
+pub fn initialize_text_buffer(buffer: &mut [&mut [(u8, u8, u8)]], text: String, color: (u8, u8, u8)) {
+    let mut textindex = 0;
+    let mut xindex = 0;
+    let mut fontsindex = text[textindex] as usize - 65;
+    let mut xcounter = 0;
+    while xindex < buffer.len() {
+        for i in 0..7 {
+            buffer[xindex][i] = 
+                if unsafe { state.fonts[fontsindex][xcounter][i] } == true {
+                    color
+                } else {
+                    buffer[xindex][i]
+                };
+        }
+        xindex+=1;
+        xcounter+=1;
+        if xcounter == unsafe { state.fonts[fontsindex].len() } {
+            xcounter = 0;
+            textindex += 1;
+            if textindex == text.len() {
+                return ();
+            }
+            fontsindex = text[textindex] as usize - 65;
+            xindex += 1;
+        }
+    }
+}
+
+pub fn draw_text_buffer(buffer: &[&mut [(u8, u8, u8)]], ypos: usize) {
+    let mut yindex = ypos;
+    let mut xindex = 1;
+    let mut xcounter = 0;
+    let mut ycounter = 0;
+    while xindex < WIDTH-1 && xcounter < buffer.len() {
+        while yindex < HEIGHT && ycounter < buffer[0].len() {
+            unsafe {
+                display[xindex][yindex] = buffer[xcounter][ycounter];
+            }
+            yindex += 1;
+            ycounter += 1;
+        }
+        yindex = ypos;
+        ycounter = 0;
+        xindex += 1;
+        xcounter += 1;
+    }
+}
+
+pub fn shift_text_buffer(buffer: &mut [&mut [(u8, u8, u8)]]) {
+    buffer.rotate_left(1);
+}
